@@ -42,23 +42,23 @@ function LeaveApplication() {
   };
 
   // File change with type validation
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    if (!selectedFile) return;
+  // const handleFileChange = (e) => {
+  //   const selectedFile = e.target.files[0];
+  //   if (!selectedFile) return;
 
-    const allowedTypes = ["application/pdf", "image/jpeg", "image/png"];
-    if (!allowedTypes.includes(selectedFile.type)) {
-      alert("Invalid file type! Only PDF, JPG, PNG allowed.");
-      e.target.value = "";
-      return;
-    }
-    setFile(selectedFile);
-  };
+  //   const allowedTypes = ["application/pdf", "image/jpeg", "image/png"];
+  //   if (!allowedTypes.includes(selectedFile.type)) {
+  //     alert("Invalid file type! Only PDF, JPG, PNG allowed.");
+  //     e.target.value = "";
+  //     return;
+  //   }
+  //   setFile(selectedFile);
+  // };
 
-  const handleRemoveFile = () => {
-    setFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
+  // const handleRemoveFile = () => {
+  //   setFile(null);
+  //   if (fileInputRef.current) fileInputRef.current.value = "";
+  // };
 
   // const getTomorrowDate = () => {
   //   const tomorrow = new Date();
@@ -345,4 +345,5 @@ function LeaveApplication() {
 }
 
 export default LeaveApplication;
+
 
