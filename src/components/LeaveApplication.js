@@ -52,22 +52,41 @@ function LeaveApplication() {
     e.preventDefault();
     setSubmitAttempted(true);
 
-    const newErrors = {};
+  const newErrors = {};
 
-    if (!employeeId.trim()) newErrors.employeeId = true;
-    if (!employeeData || !employeeData.empId) newErrors.employeeId = true;
-    if (!reason.trim()) newErrors.reason = true;
-    if (!startDate) newErrors.startDate = true;
-    if (!endDate) newErrors.endDate = true;
-    if (startDate && endDate && new Date(endDate) < new Date(startDate))
-      newErrors.endDate = true;
+  // ✅ Employee validation
+  if (!employeeId.trim()) newErrors.employeeId = true;
+  if (!employeeData || !employeeData.empId) newErrors.employeeId = true;
 
-    setErrors(newErrors);
+  // ✅ Reason must be filled
+  if (!reason.trim()) newErrors.reason = true;
 
-    if (Object.keys(newErrors).length > 0) {
-      alert("Please fix the highlighted fields.");
-      return;
-    }
+  // ✅ Dates must be valid and in correct order
+  if (!startDate) newErrors.startDate = true;
+  if (!endDate) newErrors.endDate = true;
+  if (startDate && endDate && new Date(endDate) < new Date(startDate))
+    newErrors.endDate = true;
+
+  // ✅ Contact number must be exactly 10 digits
+  if (!contact || contact.length !== 10) newErrors.contact = true;
+
+  // ✅ At least one file must be attached
+  if (!file || file.length === 0) newErrors.file = true;
+
+  // Stop and alert if any validation failed
+  setErrors(newErrors);
+  if (Object.keys(newErrors).length > 0) {
+    let msg = "Please fix the highlighted fields before submitting:\n";
+    if (newErrors.employeeId) msg += "- Employee ID is invalid or missing\n";
+    if (newErrors.reason) msg += "- Reason for leave is required\n";
+    if (newErrors.startDate || newErrors.endDate)
+      msg += "- Please check your leave dates\n";
+    if (newErrors.contact) msg += "- Contact number must be 10 digits\n";
+    if (newErrors.file) msg += "- At least one attachment is required\n";
+    alert(msg);
+    return;
+  }
+
 
     const formData = new FormData();
     formData.append("empId", employeeData.empId);
@@ -80,8 +99,17 @@ function LeaveApplication() {
     formData.append("endDate", endDate);
     formData.append("contact", contact);
     if (file.length > 0) {
-      file.forEach((f) => formData.append("files", f));
-    }
+      file
+        .filter((f) => !f.isServerFile)
+        .forEach((f) => formData.append("files", f));   
+  }
+  // ✅ Send the names of server files that are still kept
+    const retainedFiles = file
+      .filter((f) => f.isServerFile)
+      .map((f) => f.name)
+      .join(";");
+    formData.append("retainedFiles", retainedFiles);
+
 
     // Generate or reuse token
     const token =
@@ -103,6 +131,13 @@ function LeaveApplication() {
         method,
         body: formData,
       });
+
+      // 🔍 Add this overlap check block here
+      if (res.status === 409) {
+        const msg = await res.text();
+        alert(msg); // show backend message like "Leave dates overlap..."
+        return; // stop further processing
+      }
 
       if (res.ok) {
         // Build local application object (no files content, only metadata)
@@ -155,7 +190,7 @@ function LeaveApplication() {
   };
 
   // Handle Edit
-  const handleEdit = (index) => {
+  const handleEdit = async (index) => {
     const app = applications[index];
     setEmployeeId(app.empId);
     setEmployeeData({
@@ -168,12 +203,37 @@ function LeaveApplication() {
     setStartDate(app.startDate);
     setEndDate(app.endDate);
     setContact(app.contact);
-    // We don't restore files (user can reattach if needed)
-    setFile([]);
-    if (fileInputRef.current) fileInputRef.current.value = "";
     setEditingIndex(index);
+
+    // ✅ Fetch the existing application from backend (to get files)
+    try {
+      const res = await fetch(`http://localhost:8080/api/leave/token/${app.token}`);
+      if (res.ok) {
+        const data = await res.json();
+
+        if (data.fileName) {
+          // Split filenames (semicolon-separated) and map to preview objects
+          const filesFromServer = data.fileName.split(";").filter(Boolean).map((name) => ({
+            name,
+            // Assuming files are stored like: uploads/<applicationType>/<empId>/<filename>
+            // adjust if your path differs
+            url: `http://localhost:8080/uploads/${data.applicationType}/${data.empId}/${name}`,
+            isServerFile: true, // flag to know these are old files
+          }));
+
+          setFile(filesFromServer);
+        } else {
+          setFile([]);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching existing files:", err);
+    }
+
+    if (fileInputRef.current) fileInputRef.current.value = "";
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
 
   return (
     <>
@@ -334,17 +394,36 @@ function LeaveApplication() {
               {file.length > 0 && (
                 <div className="file-preview-list">
                   {file.map((fileItem, index) => {
-                    const fileURL = URL.createObjectURL(fileItem);
+                    // ✅ Check if this file came from the server (existing application) or was newly selected
+                    const fileURL = fileItem.isServerFile
+                      ? fileItem.url // pre-existing file (fetched from backend)
+                      : URL.createObjectURL(fileItem); // newly uploaded file
+
                     return (
                       <div key={index} className="file-preview">
-                        <a href={fileURL} target="_blank" rel="noopener noreferrer" title="Click to preview" className="file-link">
-                          {fileItem.type.startsWith("image/") ? (
-                            <img src={fileURL} alt={fileItem.name} className="file-thumb" />
-                          ) : (
+                        <a
+                          href={fileURL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Click to preview"
+                          className="file-link"
+                        >
+                          {/* ✅ Show either file name or thumbnail depending on file type */}
+                          {fileItem.name.toLowerCase().endsWith(".pdf") ? (
                             <p className="file-name">{fileItem.name}</p>
+                          ) : (
+                            <img src={fileURL} alt={fileItem.name} className="file-thumb" />
                           )}
                         </a>
-                        <button type="button" onClick={() => setFile((prev) => prev.filter((_, i) => i !== index))} className="remove-btn">
+
+                        {/* ✅ Remove button to delete selected or old file */}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFile((prev) => prev.filter((_, i) => i !== index))
+                          }
+                          className="remove-btn"
+                        >
                           Remove
                         </button>
                       </div>
