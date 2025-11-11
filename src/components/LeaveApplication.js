@@ -1,10 +1,13 @@
 import React, { useState, useRef } from "react";
 import "./../styles/LeaveApplication.css";
 import { useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+
 
 function LeaveApplication() {
   const location = useLocation();
   const { applicationType } = location.state || { applicationType: "leave" }; // default "leave"
+  const navigate = useNavigate();
 
   const [employeeId, setEmployeeId] = useState("");
   const [employeeData, setEmployeeData] = useState({});
@@ -434,10 +437,43 @@ function LeaveApplication() {
             </div>
           </div>
 
-          <button type="submit" className="submit-btn">
-            {editingIndex !== null ? "Update Application" : "Submit Application"}
-          </button>
+          <div className="button-row">
+            <button type="submit" className="submit-btn">
+              {editingIndex !== null ? "Update Application" : "Submit Application"}
+            </button>
+
+            <button
+              type="button"
+              className="reset-btn"
+              onClick={() => {
+                setEmployeeId("");
+                setEmployeeData({});
+                setReason("");
+                setContact("");
+                setStartDate("");
+                setEndDate("");
+                setFile([]);
+                if (fileInputRef.current) fileInputRef.current.value = "";
+                setEditingIndex(null);
+                setSubmitAttempted(false);
+                setErrors({});
+                setSuccessMessage("");
+              }}
+            >
+              Reset
+            </button>
+          </div>
+
         </form>
+      </div>
+      
+      <div className="print-btn-container">
+        <button
+          className="print-btn"
+          onClick={() => window.open("/print-leaves", "_blank")}
+        >
+          🖨️ Print All Leave Applications
+        </button>
       </div>
 
       {/* Bottom table section: placed OUTSIDE the form container so it can span full width */}

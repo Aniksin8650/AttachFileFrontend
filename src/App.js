@@ -11,6 +11,7 @@ import LeaveApplication from "./components/LeaveApplication";
 import TadaApplication from "./components/TadaApplication";
 import About from "./components/About";
 import Settings from "./components/Settings";
+import PrintLeaveApplications from "./components/PrintLeaveApplications";
 
 // 🔐 Admin Pages
 import Login from "./components/Login";
@@ -36,7 +37,8 @@ function App() {
             <Route path="/tada-application" element={<TadaApplication />}/>
             <Route path="/about" element={<About />} />
             <Route path="/settings" element={<Settings />} />
-
+            <Route path="/print-leaves" element={<PrintLeaveApplications />} />
+            
             {/* Admin Related Routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/admin-dashboard" element={<AdminDashboard />} />
