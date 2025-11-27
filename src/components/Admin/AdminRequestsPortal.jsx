@@ -1,8 +1,54 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import axios from "axios";
 import "./AdminRequestsPortal.css";
 
+const API_BASE = "http://localhost:8080";
+
 const AdminRequestsPortal = () => {
+  const [leaveCounts, setLeaveCounts] = useState({
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchLeaveCounts = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const statuses = ["PENDING", "APPROVED", "REJECTED"];
+
+        const responses = await Promise.all(
+          statuses.map((status) =>
+            axios.get(`${API_BASE}/api/leave/status/${status}`)
+          )
+        );
+
+        const [pendingRes, approvedRes, rejectedRes] = responses;
+
+        setLeaveCounts({
+          pending: pendingRes.data?.length ?? 0,
+          approved: approvedRes.data?.length ?? 0,
+          rejected: rejectedRes.data?.length ?? 0,
+        });
+      } catch (err) {
+        console.error(err);
+        setError(
+          err.response?.data ||
+            "Unable to load leave request counts right now."
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLeaveCounts();
+  }, []);
+
   return (
     <div className="admin-req">
       <div className="admin-req-header">
@@ -21,13 +67,22 @@ const AdminRequestsPortal = () => {
       </div>
 
       <div className="admin-req-summary">
-        <div className="req-chip">Pending</div>
-        <div className="req-chip req-chip-soft">Approved</div>
-        <div className="req-chip req-chip-soft">Rejected</div>
+        <div className="req-chip">
+          Pending {loading ? "…" : `(${leaveCounts.pending})`}
+        </div>
+        <div className="req-chip req-chip-soft">
+          Approved {loading ? "…" : `(${leaveCounts.approved})`}
+        </div>
+        <div className="req-chip req-chip-soft">
+          Rejected {loading ? "…" : `(${leaveCounts.rejected})`}
+        </div>
         <span className="req-chip-hint">
-          (Counts and filters can be wired when backend is ready)
+          Currently showing counts for <strong>Leave</strong> applications.
+          TA / DA / LTC can be wired with similar endpoints.
         </span>
       </div>
+
+      {error && <p className="admin-req-error">{error}</p>}
 
       <div className="admin-req-grid">
         <Link to="/admin/requests/leave" className="req-card">

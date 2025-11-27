@@ -13,7 +13,7 @@ const Home = () => {
         <section className="home-hero">
           <div className="home-hero-text">
             <h1 className="home-title">
-              Unified Leave & Travel <span>Management</span> Portal
+              Unified Leave ,TA,DA and LTC <span>Management</span> Portal
             </h1>
             <p className="home-subtitle">
               Apply, track, and approve leave and TA/DA/LTC requests in a

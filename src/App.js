@@ -22,10 +22,10 @@ import PrintLeaveApplications from "./components/Leave/PrintLeaveApplications";
 
 // 🔐 Admin Pages (Dash + Requests)
 import AdminDashboard from "./components/Admin/AdminDashboard";
-import AdminLeave from "./components/Admin/AdminLeave";
-import AdminTada from "./components/Admin/AdminTada";
-import AdminLtc from "./components/Admin/AdminLtc";
-import AdminOther from "./components/Admin/AdminOther";
+import AdminLeaveRequests from "./components/Admin/Requests/AdminLeaveRequests";
+import AdminTARequests from "./components/Admin/Requests/AdminTARequests";
+import AdminDARequests from "./components/Admin/Requests/AdminDARequests";
+import AdminLTCRequests from "./components/Admin/Requests/AdminLTCRequests";
 
 // 🔐 Admin Pages (Apply / Requests Portals)
 import AdminApplyPortal from "./components/Admin/AdminApplyPortal";
@@ -85,10 +85,10 @@ function App() {
             {/* 2️⃣ Admin REQUESTS portal (approve / reject employees’ requests) */}
             <Route path="/admin/requests" element={<AdminRequestsPortal />} />
             {/* Inside Requests portal, show 4 cards that link to below paths: */}
-            <Route path="/admin/requests/leave" element={<AdminLeave />} />
-            <Route path="/admin/requests/ta" element={<AdminTada />} />
-            <Route path="/admin/requests/ltc" element={<AdminLtc />} />
-            <Route path="/admin/requests/other" element={<AdminOther />} />
+            <Route path="/admin/requests/leave" element={<AdminLeaveRequests />} />
+            <Route path="/admin/requests/ta" element={<AdminTARequests />} />
+            <Route path="/admin/requests/da" element={<AdminDARequests />} />
+            <Route path="/admin/requests/ltc" element={<AdminLTCRequests />} />
           </Routes>
         </div>
 

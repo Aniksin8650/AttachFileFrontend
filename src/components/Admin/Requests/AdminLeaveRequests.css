@@ -1,0 +1,120 @@
+/* Inner container inside the dark admin-req shell */
+.admin-leave-container {
+  margin-top: 1.2rem;
+  padding: 1.2rem 1.4rem 1.6rem;
+  border-radius: var(--admin-req-radius);
+  border: 1px solid var(--admin-req-border);
+  background: radial-gradient(circle at top left, #020617 0, #020617 70%);
+}
+
+/* Tabs */
+.tab-buttons {
+  display: flex;
+  justify-content: flex-start;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.tab-buttons button {
+  padding: 0.45rem 1.1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(15, 23, 42, 0.85);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--admin-req-muted);
+  transition:
+    background 0.13s ease,
+    border-color 0.13s ease,
+    color 0.13s ease,
+    transform 0.13s ease;
+}
+
+.tab-buttons button.active {
+  background: rgba(14, 165, 233, 0.2);
+  border-color: var(--admin-req-primary);
+  color: #e5f3ff;
+  transform: translateY(-1px);
+}
+
+.tab-buttons button:hover {
+  border-color: var(--admin-req-primary);
+  color: #e5f3ff;
+}
+
+/* Requests section */
+.requests-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.request-card {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: radial-gradient(circle at top left, #020617 0, #020617 70%);
+  padding: 0.9rem 1rem;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.7);
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.9rem;
+}
+
+.request-details p {
+  margin: 2px 0;
+  font-size: 0.85rem;
+  color: var(--admin-req-text);
+}
+
+.request-details p strong {
+  color: #e5e7eb;
+}
+
+/* Actions */
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: flex-end;
+}
+
+.accept-btn,
+.reject-btn {
+  border: none;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition:
+    background 0.13s ease,
+    box-shadow 0.13s ease,
+    transform 0.13s ease;
+}
+
+.accept-btn {
+  background: rgba(34, 197, 94, 0.18);
+  color: #bbf7d0;
+  border: 1px solid rgba(34, 197, 94, 0.7);
+}
+
+.reject-btn {
+  background: rgba(248, 113, 113, 0.12);
+  color: #fecaca;
+  border: 1px solid rgba(248, 113, 113, 0.7);
+}
+
+.accept-btn:hover,
+.reject-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.7);
+}
+
+.no-requests {
+  color: var(--admin-req-muted);
+  font-style: italic;
+  font-size: 0.85rem;
+}
