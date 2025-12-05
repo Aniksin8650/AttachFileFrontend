@@ -4,6 +4,7 @@ import "../Shared/AttachFile.css";
 import { useLocation } from "react-router-dom";
 
 import AttachFile from "../Shared/AttachFile";
+import { formatFileNameForDisplay } from "../Shared/fileNameUtils";
 
 function TAApplication() {
   const location = useLocation();
@@ -21,7 +22,10 @@ function TAApplication() {
   const [travelDate, setTravelDate] = useState("");
   const [distance, setDistance] = useState("");
   const [taAmount, setTaAmount] = useState("");
-  const [travelMode, setTravelMode] = useState("");
+
+  // Travel mode: dropdown + optional detail
+  const [travelModeType, setTravelModeType] = useState(""); // BUS / TRAIN / FLIGHT / PRIVATE / OTHER
+  const [travelModeDetail, setTravelModeDetail] = useState(""); // text for PRIVATE / OTHER
 
   const [errors, setErrors] = useState({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
@@ -29,8 +33,14 @@ function TAApplication() {
   const [applications, setApplications] = useState([]);
   const [editingIndex, setEditingIndex] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // sorting
   const [sortField, setSortField] = useState("ApplnNo");
   const [sortDirection, setSortDirection] = useState("asc");
+
+  // pagination
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [message, setMessage] = useState(null);
   const [messageType, setMessageType] = useState("info");
@@ -42,6 +52,47 @@ function TAApplication() {
     setMessage(msg);
     setMessageType(type);
     setTimeout(() => setMessage(null), 4000);
+  };
+
+  // ---------- Travel Mode helpers ----------
+
+  const buildTravelModeValue = (type, detail) => {
+    const trimmedDetail = (detail || "").trim();
+
+    switch (type) {
+      case "BUS":
+        return "Bus";
+      case "TRAIN":
+        return "Train";
+      case "FLIGHT":
+        return "Flight";
+      case "PRIVATE":
+        // Private Vehicle (Specify) -> user text + " (Private)"
+        return trimmedDetail ? `${trimmedDetail} (Private)` : "";
+      case "OTHER":
+        // Others (Specify) -> only text
+        return trimmedDetail;
+      default:
+        return "";
+    }
+  };
+
+  const parseTravelModeFromString = (value = "") => {
+    const v = value.trim();
+    if (!v) return { type: "", detail: "" };
+
+    if (v === "Bus") return { type: "BUS", detail: "" };
+    if (v === "Train") return { type: "TRAIN", detail: "" };
+    if (v === "Flight") return { type: "FLIGHT", detail: "" };
+
+    // detect "(Private)" suffix
+    if (v.toLowerCase().endsWith("(private)")) {
+      const base = v.replace(/\(private\)\s*$/i, "").trim();
+      return { type: "PRIVATE", detail: base };
+    }
+
+    // everything else -> Others (Specify)
+    return { type: "OTHER", detail: v };
   };
 
   // -------- Load TA applications --------
@@ -161,7 +212,11 @@ function TAApplication() {
     } else if (startDate && new Date(endDate) < new Date(startDate)) {
       newErrors.endDate = "End date cannot be before start date";
     }
-    if (!contact || contact.length !== 10) {
+
+    // Normalize contact before validation
+    const cleanedContact = (contact || "").replace(/\D/g, "").slice(0, 10);
+
+    if (!cleanedContact || cleanedContact.length !== 10) {
       newErrors.contact = "Contact must be 10 digits";
     }
 
@@ -175,9 +230,15 @@ function TAApplication() {
     if (!taAmount || isNaN(parseFloat(taAmount))) {
       newErrors.taAmount = "Enter valid TA amount";
     }
-    if (!travelMode.trim()) {
+
+    const travelModeValue = buildTravelModeValue(
+      travelModeType,
+      travelModeDetail
+    );
+    if (!travelModeValue.trim()) {
       newErrors.travelMode = "Travel mode is required";
     }
+
     if (!file || file.length === 0) {
       newErrors.files = "At least one attachment is required";
     }
@@ -198,12 +259,13 @@ function TAApplication() {
     formData.append("reason", reason);
     formData.append("startDate", startDate);
     formData.append("endDate", endDate);
-    formData.append("contact", contact);
+    // Always send cleaned contact to backend
+    formData.append("contact", cleanedContact);
 
     formData.append("travelDate", travelDate);
     formData.append("distance", distance);
     formData.append("taAmount", taAmount);
-    formData.append("travelMode", travelMode);
+    formData.append("travelMode", travelModeValue);
 
     file
       .filter((f) => !f.isServerFile)
@@ -274,7 +336,8 @@ function TAApplication() {
       setTravelDate("");
       setDistance("");
       setTaAmount("");
-      setTravelMode("");
+      setTravelModeType("");
+      setTravelModeDetail("");
       setFile([]);
       setErrors({});
       setSubmitAttempted(false);
@@ -298,11 +361,20 @@ function TAApplication() {
     setReason(app.reason || "");
     setStartDate(app.startDate || "");
     setEndDate(app.endDate || "");
-    setContact(app.contact || "");
+
+    // Clean contact coming from DB / backend
+    const rawContact = app.contact ? String(app.contact) : "";
+    const cleanedContact = rawContact.replace(/\D/g, "").slice(0, 10);
+    setContact(cleanedContact);
+
     setTravelDate(app.travelDate || "");
     setDistance(app.distance || "");
     setTaAmount(app.taAmount || "");
-    setTravelMode(app.travelMode || "");
+
+    const parsedMode = parseTravelModeFromString(app.travelMode || "");
+    setTravelModeType(parsedMode.type);
+    setTravelModeDetail(parsedMode.detail);
+
     setEditingIndex(index);
     setErrors({});
     setSubmitAttempted(false);
@@ -360,6 +432,52 @@ function TAApplication() {
     return 0;
   });
 
+  // -------- Pagination logic --------
+  const totalPages = Math.max(
+    1,
+    Math.ceil(sortedApplications.length / rowsPerPage || 1)
+  );
+  const currentPageSafe = Math.min(currentPage, totalPages);
+  const startIndex = (currentPageSafe - 1) * rowsPerPage;
+  const endIndex = startIndex + rowsPerPage;
+  const paginatedApplications = sortedApplications.slice(startIndex, endIndex);
+
+  const handlePageChange = (page) => {
+    if (page < 1 || page > totalPages) return;
+    setCurrentPage(page);
+  };
+
+  const handleRowsPerPageChange = (e) => {
+    const value = parseInt(e.target.value, 10) || 10;
+    setRowsPerPage(value);
+    setCurrentPage(1);
+  };
+
+  // reset to page 1 when filters/sort/app list changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, sortField, sortDirection, rowsPerPage, applications.length]);
+
+  // -------- Sorting via header click (UPDATED LIKE LEAVE) --------
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+    setCurrentPage(1);
+  };
+
+  const renderSortIndicator = (field) => {
+    if (sortField !== field) return null;
+    return (
+      <span className="sort-indicator">
+        {sortDirection === "asc" ? "▲" : "▼"}
+      </span>
+    );
+  };
+
   // -------- Export helpers --------
   const exportToExcel = (apps) => {
     const headers = [
@@ -382,7 +500,7 @@ function TAApplication() {
       app.taAmount || "",
       app.travelMode || "",
       app.files && app.files.length
-        ? app.files.map((f) => f.name).join("; ")
+        ? app.files.map((f) => formatFileNameForDisplay(f.name)).join("; ")
         : "",
     ]);
 
@@ -494,6 +612,7 @@ function TAApplication() {
     }
   };
 
+  // -------- JSX --------
   return (
     <>
       {message && (
@@ -630,9 +749,7 @@ function TAApplication() {
                 type="text"
                 value={contact}
                 onChange={(e) => {
-                  const cleaned = e.target.value
-                    .replace(/\D/g, "")
-                    .slice(0, 10);
+                  const cleaned = e.target.value.replace(/\D/g, "").slice(0, 10);
                   setContact(cleaned);
                   setErrors((prev) => {
                     if (!prev.contact) return prev;
@@ -722,15 +839,18 @@ function TAApplication() {
             </div>
           </div>
 
+          {/* Travel Mode (dropdown + conditional input) */}
           <div className="form-row">
             <label>Travel Mode:</label>
-            <div style={{ flex: 2 }}>
-              <input
-                type="text"
-                value={travelMode}
+            <div className="travel-mode-wrapper">
+              <select
+                value={travelModeType}
                 onChange={(e) => {
                   const value = e.target.value;
-                  setTravelMode(value);
+                  setTravelModeType(value);
+                  if (value !== "PRIVATE" && value !== "OTHER") {
+                    setTravelModeDetail("");
+                  }
                   setErrors((prev) => {
                     if (!prev.travelMode) return prev;
                     const u = { ...prev };
@@ -738,12 +858,44 @@ function TAApplication() {
                     return u;
                   });
                 }}
-                className={getInputClass("travelMode")}
-              />
-              {submitAttempted && errors.travelMode && (
-                <div className="field-error-text">{errors.travelMode}</div>
+                className={`travel-mode-select ${getInputClass("travelMode")}`}
+              >
+                <option value="">Select mode</option>
+                <option value="BUS">Bus</option>
+                <option value="TRAIN">Train</option>
+                <option value="FLIGHT">Flight</option>
+                <option value="PRIVATE">Private Vehicle (Specify)</option>
+                <option value="OTHER">Others (Specify)</option>
+              </select>
+
+              {(travelModeType === "PRIVATE" ||
+                travelModeType === "OTHER") && (
+                <input
+                  type="text"
+                  value={travelModeDetail}
+                  onChange={(e) => {
+                    setTravelModeDetail(e.target.value);
+                    setErrors((prev) => {
+                      if (!prev.travelMode) return prev;
+                      const u = { ...prev };
+                      delete u.travelMode;
+                      return u;
+                    });
+                  }}
+                  placeholder={
+                    travelModeType === "PRIVATE"
+                      ? "Enter vehicle details"
+                      : "Enter travel mode"
+                  }
+                  className={`travel-mode-detail ${getInputClass(
+                    "travelMode"
+                  )}`}
+                />
               )}
             </div>
+            {submitAttempted && errors.travelMode && (
+              <div className="field-error-text">{errors.travelMode}</div>
+            )}
           </div>
 
           {/* Attach File */}
@@ -791,7 +943,8 @@ function TAApplication() {
                 setTravelDate("");
                 setDistance("");
                 setTaAmount("");
-                setTravelMode("");
+                setTravelModeType("");
+                setTravelModeDetail("");
                 setFile([]);
                 setEditingIndex(null);
                 setErrors({});
@@ -811,7 +964,24 @@ function TAApplication() {
           <div className="submitted-section">
             <h3>Submitted TA Applications</h3>
 
+            {/* Top controls: entries-per-page & search */}
             <div className="table-controls">
+              <div className="table-control-item">
+                <label>
+                  Show{" "}
+                  <select
+                    value={rowsPerPage}
+                    onChange={handleRowsPerPageChange}
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                  </select>{" "}
+                  entries
+                </label>
+              </div>
+
               <div className="table-control-item">
                 <label>Search:&nbsp;</label>
                 <input
@@ -821,50 +991,54 @@ function TAApplication() {
                   placeholder="Search by ApplnNo, Emp ID, Name, Mode, Date"
                 />
               </div>
-
-              <div className="table-control-item">
-                <label>Sort by:&nbsp;</label>
-                <select
-                  value={sortField}
-                  onChange={(e) => setSortField(e.target.value)}
-                >
-                  <option value="ApplnNo">Application No</option>
-                  <option value="name">Name</option>
-                  <option value="travelDate">Travel Date</option>
-                  <option value="distance">Distance</option>
-                  <option value="taAmount">TA Amount</option>
-                </select>
-                <button
-                  type="button"
-                  className="sort-direction-btn"
-                  onClick={() =>
-                    setSortDirection((prev) =>
-                      prev === "asc" ? "desc" : "asc"
-                    )
-                  }
-                >
-                  {sortDirection === "asc" ? "⬆️ Asc" : "⬇️ Desc"}
-                </button>
-              </div>
             </div>
 
             <table className="applications-table">
               <thead>
                 <tr>
-                  <th>ApplnNo</th>
-                  <th>Emp ID</th>
-                  <th>Name</th>
-                  <th>Travel Date</th>
-                  <th>Distance</th>
-                  <th>TA Amount</th>
-                  <th>Travel Mode</th>
+                  <th
+                    onClick={() => handleSort("ApplnNo")}
+                    className="sortable"
+                  >
+                    ApplnNo {renderSortIndicator("ApplnNo")}
+                  </th>
+                  <th onClick={() => handleSort("empId")} className="sortable">
+                    Emp ID {renderSortIndicator("empId")}
+                  </th>
+                  <th onClick={() => handleSort("name")} className="sortable">
+                    Name {renderSortIndicator("name")}
+                  </th>
+                  <th
+                    onClick={() => handleSort("travelDate")}
+                    className="sortable"
+                  >
+                    Travel Date {renderSortIndicator("travelDate")}
+                  </th>
+                  <th
+                    onClick={() => handleSort("distance")}
+                    className="sortable"
+                  >
+                    Distance {renderSortIndicator("distance")}
+                  </th>
+                  <th
+                    onClick={() => handleSort("taAmount")}
+                    className="sortable"
+                  >
+                    TA Amount {renderSortIndicator("taAmount")}
+                  </th>
+                  <th
+                    onClick={() => handleSort("travelMode")}
+                    className="sortable"
+                  >
+                    Travel Mode {renderSortIndicator("travelMode")}
+                  </th>
                   <th>Files</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {sortedApplications.map((app, idx) => (
-                  <tr key={app.ApplnNo}>
+                {paginatedApplications.map((app, idx) => (
+                  <tr key={app.ApplnNo || idx}>
                     <td>{app.ApplnNo}</td>
                     <td>{app.empId}</td>
                     <td>{app.name}</td>
@@ -883,7 +1057,7 @@ function TAApplication() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                               >
-                                {f.name}
+                                {formatFileNameForDisplay(f.name)}
                               </a>
                             </div>
                           );
@@ -895,15 +1069,75 @@ function TAApplication() {
                     <td>
                       <button
                         className="edit-btn"
-                        onClick={() => handleEdit(idx)}
+                        onClick={() =>
+                          handleEdit(
+                            applications.findIndex(
+                              (x) => x.ApplnNo === app.ApplnNo
+                            )
+                          )
+                        }
                       >
                         Edit
                       </button>
                     </td>
                   </tr>
                 ))}
+
+                {paginatedApplications.length === 0 && (
+                  <tr>
+                    <td colSpan={9} style={{ textAlign: "center" }}>
+                      No records found.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
+
+            {/* Pagination bottom row */}
+            <div className="pagination-container">
+              <div className="pagination-info">
+                Showing{" "}
+                {sortedApplications.length === 0
+                  ? 0
+                  : startIndex + 1}{" "}
+                to{" "}
+                {Math.min(endIndex, sortedApplications.length)} of{" "}
+                {sortedApplications.length} entries
+              </div>
+
+              <div className="pagination">
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPageSafe - 1)}
+                  disabled={currentPageSafe === 1}
+                >
+                  &laquo;
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                  (page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => handlePageChange(page)}
+                      className={
+                        page === currentPageSafe ? "active" : undefined
+                      }
+                    >
+                      {page}
+                    </button>
+                  )
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPageSafe + 1)}
+                  disabled={currentPageSafe === totalPages}
+                >
+                  &raquo;
+                </button>
+              </div>
+            </div>
 
             <div className="export-row">
               <span>Export:&nbsp;</span>

@@ -4,6 +4,7 @@ import "../Shared/AttachFile.css";
 import { useLocation } from "react-router-dom";
 
 import AttachFile from "../Shared/AttachFile";
+import { formatFileNameForDisplay } from "../Shared/fileNameUtils";
 
 function LTCApplication() {
   const location = useLocation();
@@ -30,6 +31,10 @@ function LTCApplication() {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState("ApplnNo");
   const [sortDirection, setSortDirection] = useState("asc");
+
+  // pagination
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Toast
   const [message, setMessage] = useState(null);
@@ -64,8 +69,8 @@ function LTCApplication() {
                 endDate: d.endDate,
                 contact: d.contact,
                 applicationType: d.applicationType,
-                destination: d.destination,
-                familyCount: d.familyCount,
+                destination: d.travelDestination || d.destination || "",
+                familyCount: d.familyMembers || d.familyCount || "",
                 claimYear: d.claimYear,
                 files: d.fileName
                   ? d.fileName
@@ -160,9 +165,13 @@ function LTCApplication() {
     } else if (startDate && new Date(endDate) < new Date(startDate)) {
       newErrors.endDate = "End date cannot be before start date";
     }
-    if (!contact || contact.length !== 10) {
+
+    // 🔹 Normalize contact for validation
+    const cleanedContact = (contact || "").replace(/\D/g, "").slice(0, 10);
+    if (!cleanedContact || cleanedContact.length !== 10) {
       newErrors.contact = "Contact must be 10 digits";
     }
+
     if (!destination.trim()) {
       newErrors.destination = "Destination is required";
     }
@@ -192,10 +201,11 @@ function LTCApplication() {
     formData.append("reason", reason);
     formData.append("startDate", startDate);
     formData.append("endDate", endDate);
-    formData.append("contact", contact);
+    // 🔹 Send cleaned contact
+    formData.append("contact", cleanedContact);
 
-    formData.append("destination", destination);
-    formData.append("familyCount", familyCount);
+    formData.append("travelDestination", destination);
+    formData.append("familyMembers", String(familyCount)); 
     formData.append("claimYear", claimYear);
 
     file
@@ -291,7 +301,12 @@ function LTCApplication() {
     setReason(app.reason || "");
     setStartDate(app.startDate || "");
     setEndDate(app.endDate || "");
-    setContact(app.contact || "");
+
+    // 🔹 Clean contact coming from DB
+    const rawContact = app.contact ? String(app.contact) : "";
+    const cleanedContact = rawContact.replace(/\D/g, "").slice(0, 10);
+    setContact(cleanedContact);
+
     setDestination(app.destination || "");
     setFamilyCount(app.familyCount || "");
     setClaimYear(app.claimYear || "");
@@ -352,6 +367,52 @@ function LTCApplication() {
     return 0;
   });
 
+  // -------- Pagination --------
+  const totalPages = Math.max(
+    1,
+    Math.ceil(sortedApplications.length / rowsPerPage || 1)
+  );
+  const currentPageSafe = Math.min(currentPage, totalPages);
+  const startIndex = (currentPageSafe - 1) * rowsPerPage;
+  const endIndex = startIndex + rowsPerPage;
+  const paginatedApplications = sortedApplications.slice(startIndex, endIndex);
+
+  const handlePageChange = (page) => {
+    if (page < 1 || page > totalPages) return;
+    setCurrentPage(page);
+  };
+
+  const handleRowsPerPageChange = (e) => {
+    const value = parseInt(e.target.value, 10) || 10;
+    setRowsPerPage(value);
+    setCurrentPage(1);
+  };
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, sortField, sortDirection, rowsPerPage, applications.length]);
+
+  // -------- Header-based sorting --------
+  // ------- header-based sorting (toggle asc/desc like Leave) -------
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+    setCurrentPage(1);
+  };
+
+  const renderSortIndicator = (field) => {
+    if (sortField !== field) return null;
+    return (
+      <span className="sort-indicator">
+        {sortDirection === "asc" ? "▲" : "▼"}
+      </span>
+    );
+  };
+
   // -------- Export helpers --------
   const exportToExcel = (apps) => {
     const headers = [
@@ -372,8 +433,8 @@ function LTCApplication() {
       app.familyCount || "",
       app.claimYear || "",
       app.files && app.files.length
-        ? app.files.map((f) => f.name).join("; ")
-        : "",
+      ? app.files.map((f) => formatFileNameForDisplay(f.name)).join("; ")
+      : "",
     ]);
 
     const escapeCsv = (value) => {
@@ -777,7 +838,24 @@ function LTCApplication() {
           <div className="submitted-section">
             <h3>Submitted LTC Applications</h3>
 
+            {/* Top controls: entries-per-page & search */}
             <div className="table-controls">
+              <div className="table-control-item">
+                <label>
+                  Show{" "}
+                  <select
+                    value={rowsPerPage}
+                    onChange={handleRowsPerPageChange}
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                  </select>{" "}
+                  entries
+                </label>
+              </div>
+
               <div className="table-control-item">
                 <label>Search:&nbsp;</label>
                 <input
@@ -787,87 +865,149 @@ function LTCApplication() {
                   placeholder="Search by ApplnNo, Emp ID, Name, Destination"
                 />
               </div>
+            </div>
+            <div className="table-scroll-wrapper">
+              <table className="applications-table">
+                <thead>
+                  <tr>
+                    <th
+                      onClick={() => handleSort("ApplnNo")}
+                      className="sortable"
+                    >
+                      ApplnNo {renderSortIndicator("ApplnNo")}
+                    </th>
+                    <th
+                      onClick={() => handleSort("empId")}
+                      className="sortable"
+                    >
+                      Emp ID {renderSortIndicator("empId")}
+                    </th>
+                    <th
+                      onClick={() => handleSort("name")}
+                      className="sortable"
+                    >
+                      Name {renderSortIndicator("name")}
+                    </th>
+                    <th
+                      onClick={() => handleSort("destination")}
+                      className="sortable"
+                    >
+                      Destination {renderSortIndicator("destination")}
+                    </th>
+                    <th
+                      onClick={() => handleSort("familyCount")}
+                      className="sortable"
+                    >
+                      Family {renderSortIndicator("familyCount")}
+                    </th>
+                    <th
+                      onClick={() => handleSort("claimYear")}
+                      className="sortable"
+                    >
+                      Claim Year {renderSortIndicator("claimYear")}
+                    </th>
+                    <th>Files</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedApplications.map((app, idx) => (
+                    <tr key={app.ApplnNo || idx}>
+                      <td>{app.ApplnNo}</td>
+                      <td>{app.empId}</td>
+                      <td>{app.name}</td>
+                      <td>{app.destination}</td>
+                      <td>{app.familyCount}</td>
+                      <td>{app.claimYear}</td>
+                      <td>
+                        {app.files && app.files.length > 0 ? (
+                          app.files.map((f, i) => {
+                            const url = `${API_BASE}/uploads/${app.applicationType}/${app.empId}/${f.name}`;
+                            return (
+                              <div key={i}>
+                                <a
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {formatFileNameForDisplay(f.name)}
+                                </a>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td>
+                        <button
+                          className="edit-btn"
+                          onClick={() =>
+                            handleEdit(
+                              applications.findIndex(
+                                (x) => x.ApplnNo === app.ApplnNo
+                              )
+                            )
+                          }
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
 
-              <div className="table-control-item">
-                <label>Sort by:&nbsp;</label>
-                <select
-                  value={sortField}
-                  onChange={(e) => setSortField(e.target.value)}
-                >
-                  <option value="ApplnNo">Application No</option>
-                  <option value="name">Name</option>
-                  <option value="destination">Destination</option>
-                  <option value="familyCount">Family Count</option>
-                  <option value="claimYear">Claim Year</option>
-                </select>
+                  {paginatedApplications.length === 0 && (
+                    <tr>
+                      <td colSpan={8} style={{ textAlign: "center" }}>
+                        No records found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {/* Pagination bottom row */}
+            <div className="pagination-container">
+              <div className="pagination-info">
+                Showing{" "}
+                {sortedApplications.length === 0 ? 0 : startIndex + 1} to{" "}
+                {Math.min(endIndex, sortedApplications.length)} of{" "}
+                {sortedApplications.length} entries
+              </div>
+
+              <div className="pagination">
                 <button
                   type="button"
-                  className="sort-direction-btn"
-                  onClick={() =>
-                    setSortDirection((prev) =>
-                      prev === "asc" ? "desc" : "asc"
-                    )
-                  }
+                  onClick={() => handlePageChange(currentPageSafe - 1)}
+                  disabled={currentPageSafe === 1}
                 >
-                  {sortDirection === "asc" ? "⬆️ Asc" : "⬇️ Desc"}
+                  &laquo;
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                  (page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => handlePageChange(page)}
+                      className={
+                        page === currentPageSafe ? "active" : undefined
+                      }
+                    >
+                      {page}
+                    </button>
+                  )
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPageSafe + 1)}
+                  disabled={currentPageSafe === totalPages}
+                >
+                  &raquo;
                 </button>
               </div>
             </div>
-
-            <table className="applications-table">
-              <thead>
-                <tr>
-                  <th>ApplnNo</th>
-                  <th>Emp ID</th>
-                  <th>Name</th>
-                  <th>Destination</th>
-                  <th>Family</th>
-                  <th>Claim Year</th>
-                  <th>Files</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedApplications.map((app, idx) => (
-                  <tr key={app.ApplnNo}>
-                    <td>{app.ApplnNo}</td>
-                    <td>{app.empId}</td>
-                    <td>{app.name}</td>
-                    <td>{app.destination}</td>
-                    <td>{app.familyCount}</td>
-                    <td>{app.claimYear}</td>
-                    <td>
-                      {app.files && app.files.length > 0 ? (
-                        app.files.map((f, i) => {
-                          const url = `${API_BASE}/uploads/${app.applicationType}/${app.empId}/${f.name}`;
-                          return (
-                            <div key={i}>
-                              <a
-                                href={url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                {f.name}
-                              </a>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td>
-                      <button
-                        className="edit-btn"
-                        onClick={() => handleEdit(idx)}
-                      >
-                        Edit
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
 
             <div className="export-row">
               <span>Export:&nbsp;</span>

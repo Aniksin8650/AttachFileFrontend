@@ -1,4 +1,5 @@
 import React, { useRef } from "react";
+import { formatFileNameForDisplay } from "./fileNameUtils";
 
 export default function AttachFile({
   files = [],
@@ -69,8 +70,12 @@ export default function AttachFile({
   };
 
   const renderPreview = (fileObj, index) => {
+    // raw stored name (with timestamp if from server)
+    const rawName = fileObj.name || "";
+    const displayName = formatFileNameForDisplay(rawName);
+
     if (fileObj.isServerFile) {
-      const isPdf = fileObj.name.toLowerCase().endsWith(".pdf");
+      const isPdf = rawName.toLowerCase().endsWith(".pdf");
 
       return (
         <div key={index} className="file-preview">
@@ -81,11 +86,20 @@ export default function AttachFile({
             className="file-link"
           >
             {isPdf ? (
-              <p className="file-name">{fileObj.name}</p>
+              <p className="file-name" title={rawName}>
+                {displayName}
+              </p>
             ) : showThumbnails ? (
-              <img src={fileObj.url} alt={fileObj.name} className="file-thumb" />
+              <img
+                src={fileObj.url}
+                alt={displayName}
+                className="file-thumb"
+                title={rawName}
+              />
             ) : (
-              <p className="file-name">{fileObj.name}</p>
+              <p className="file-name" title={rawName}>
+                {displayName}
+              </p>
             )}
           </a>
           <button
@@ -100,17 +114,31 @@ export default function AttachFile({
     }
 
     const url = URL.createObjectURL(fileObj);
-    const isPdf = fileObj.name.toLowerCase().endsWith(".pdf");
+    const isPdf = rawName.toLowerCase().endsWith(".pdf");
 
     return (
       <div key={index} className="file-preview">
-        <a href={url} target="_blank" rel="noopener noreferrer" className="file-link">
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="file-link"
+        >
           {isPdf ? (
-            <p className="file-name">{fileObj.name}</p>
+            <p className="file-name" title={rawName}>
+              {displayName}
+            </p>
           ) : showThumbnails ? (
-            <img src={url} alt={fileObj.name} className="file-thumb" />
+            <img
+              src={url}
+              alt={displayName}
+              className="file-thumb"
+              title={rawName}
+            />
           ) : (
-            <p className="file-name">{fileObj.name}</p>
+            <p className="file-name" title={rawName}>
+              {displayName}
+            </p>
           )}
         </a>
         <button
@@ -127,13 +155,13 @@ export default function AttachFile({
   return (
     <div className="attach-section-component">
       <div className="attach-controls">
-          <button
-               type="button"
-               className="attach-btn"
-               onClick={() => fileInputRef.current && fileInputRef.current.click()}
-               >
-               {files.length === 0 ? label : "Add More"}
-          </button>
+        <button
+          type="button"
+          className="attach-btn"
+          onClick={() => fileInputRef.current && fileInputRef.current.click()}
+        >
+          {files.length === 0 ? label : "Add More"}
+        </button>
         <input
           type="file"
           ref={fileInputRef}

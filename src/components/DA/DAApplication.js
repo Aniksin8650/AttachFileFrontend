@@ -4,6 +4,7 @@ import "../Shared/AttachFile.css";
 import { useLocation } from "react-router-dom";
 
 import AttachFile from "../Shared/AttachFile";
+import { formatFileNameForDisplay } from "../Shared/fileNameUtils";
 
 function DAApplication() {
   const location = useLocation();
@@ -32,6 +33,10 @@ function DAApplication() {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState("ApplnNo");
   const [sortDirection, setSortDirection] = useState("asc");
+
+  // pagination
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Toast
   const [message, setMessage] = useState(null);
@@ -156,9 +161,14 @@ function DAApplication() {
     } else if (startDate && new Date(endDate) < new Date(startDate)) {
       newErrors.endDate = "End date cannot be before start date";
     }
-    if (!contact || contact.length !== 10) {
+
+    // 🔹 Normalize contact before validation (digits only, max 10)
+    const cleanedContact = (contact || "").replace(/\D/g, "").slice(0, 10);
+
+    if (!cleanedContact || cleanedContact.length !== 10) {
       newErrors.contact = "Contact must be 10 digits";
     }
+
     if (!file || file.length === 0) {
       newErrors.files = "At least one attachment is required";
     }
@@ -189,7 +199,8 @@ function DAApplication() {
     formData.append("reason", reason);
     formData.append("startDate", startDate);
     formData.append("endDate", endDate);
-    formData.append("contact", contact);
+    // 🔹 Always send cleaned contact to backend
+    formData.append("contact", cleanedContact);
 
     formData.append("billDate", billDate);
     formData.append("billAmount", billAmount);
@@ -286,7 +297,12 @@ function DAApplication() {
     setReason(app.reason || "");
     setStartDate(app.startDate || "");
     setEndDate(app.endDate || "");
-    setContact(app.contact || "");
+
+    // 🔹 Clean contact coming from DB / backend
+    const rawContact = app.contact ? String(app.contact) : "";
+    const cleanedContact = rawContact.replace(/\D/g, "").slice(0, 10);
+    setContact(cleanedContact);
+
     setBillDate(app.billDate || "");
     setBillAmount(app.billAmount || "");
     setPurpose(app.purpose || "");
@@ -349,6 +365,53 @@ function DAApplication() {
     if (av > bv) return sortDirection === "asc" ? 1 : -1;
     return 0;
   });
+
+  // ------- pagination -------
+  const totalPages = Math.max(
+    1,
+    Math.ceil(sortedApplications.length / rowsPerPage || 1)
+  );
+  const currentPageSafe = Math.min(currentPage, totalPages);
+  const startIndex = (currentPageSafe - 1) * rowsPerPage;
+  const endIndex = startIndex + rowsPerPage;
+  const paginatedApplications = sortedApplications.slice(startIndex, endIndex);
+
+  const handlePageChange = (page) => {
+    if (page < 1 || page > totalPages) return;
+    setCurrentPage(page);
+  };
+
+  const handleRowsPerPageChange = (e) => {
+    const value = parseInt(e.target.value, 10) || 10;
+    setRowsPerPage(value);
+    setCurrentPage(1);
+  };
+
+  // reset to page 1 when relevant dependencies change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, sortField, sortDirection, rowsPerPage, applications.length]);
+
+  // ------- header-based sorting -------
+  // ------- header-based sorting (toggle asc/desc like Leave) -------
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+    setCurrentPage(1);
+  };
+
+  const renderSortIndicator = (field) => {
+    if (sortField !== field) return null;
+    return (
+      <span className="sort-indicator">
+        {sortDirection === "asc" ? "▲" : "▼"}
+      </span>
+    );
+  };
 
   // ------- export helpers -------
   const exportToExcel = (apps) => {
@@ -765,7 +828,23 @@ function DAApplication() {
           <div className="submitted-section">
             <h3>Submitted DA Applications</h3>
 
+            {/* Top controls: entries-per-page & search */}
             <div className="table-controls">
+              <div className="table-control-item">
+                <label>
+                  Show{" "}
+                  <select
+                    value={rowsPerPage}
+                    onChange={handleRowsPerPageChange}
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                  </select>{" "}
+                  entries
+                </label>
+              </div>
               <div className="table-control-item">
                 <label>Search:&nbsp;</label>
                 <input
@@ -775,49 +854,54 @@ function DAApplication() {
                   placeholder="Search by ApplnNo, Emp ID, Name, Purpose"
                 />
               </div>
-              <div className="table-control-item">
-                <label>Sort by:&nbsp;</label>
-                <select
-                  value={sortField}
-                  onChange={(e) => setSortField(e.target.value)}
-                >
-                  <option value="ApplnNo">ApplnNo</option>
-                  <option value="empId">Emp ID</option>
-                  <option value="name">Name</option>
-                  <option value="billDate">Bill Date</option>
-                  <option value="billAmount">Bill Amount</option>
-                  <option value="purpose">Purpose</option>
-                </select>
-                <button
-                  type="button"
-                  className="sort-direction-btn"
-                  onClick={() =>
-                    setSortDirection((prev) =>
-                      prev === "asc" ? "desc" : "asc"
-                    )
-                  }
-                >
-                  {sortDirection === "asc" ? "⬆️ Asc" : "⬇️ Desc"}
-                </button>
-              </div>
             </div>
 
             <table className="applications-table">
               <thead>
                 <tr>
-                  <th>ApplnNo</th>
-                  <th>Emp ID</th>
-                  <th>Name</th>
-                  <th>Bill Date</th>
-                  <th>Bill Amount</th>
-                  <th>Purpose</th>
+                  <th
+                    onClick={() => handleSort("ApplnNo")}
+                    className="sortable"
+                  >
+                    ApplnNo {renderSortIndicator("ApplnNo")}
+                  </th>
+                  <th
+                    onClick={() => handleSort("empId")}
+                    className="sortable"
+                  >
+                    Emp ID {renderSortIndicator("empId")}
+                  </th>
+                  <th
+                    onClick={() => handleSort("name")}
+                    className="sortable"
+                  >
+                    Name {renderSortIndicator("name")}
+                  </th>
+                  <th
+                    onClick={() => handleSort("billDate")}
+                    className="sortable"
+                  >
+                    Bill Date {renderSortIndicator("billDate")}
+                  </th>
+                  <th
+                    onClick={() => handleSort("billAmount")}
+                    className="sortable"
+                  >
+                    Bill Amount {renderSortIndicator("billAmount")}
+                  </th>
+                  <th
+                    onClick={() => handleSort("purpose")}
+                    className="sortable"
+                  >
+                    Purpose {renderSortIndicator("purpose")}
+                  </th>
                   <th>Files</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {sortedApplications.map((app, idx) => (
-                  <tr key={app.ApplnNo}>
+                {paginatedApplications.map((app, idx) => (
+                  <tr key={app.ApplnNo || idx}>
                     <td>{app.ApplnNo}</td>
                     <td>{app.empId}</td>
                     <td>{app.name}</td>
@@ -835,7 +919,7 @@ function DAApplication() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                               >
-                                {f.name}
+                                {formatFileNameForDisplay(f.name)}
                               </a>
                             </div>
                           );
@@ -847,15 +931,72 @@ function DAApplication() {
                     <td>
                       <button
                         className="edit-btn"
-                        onClick={() => handleEdit(idx)}
+                        onClick={() =>
+                          handleEdit(
+                            applications.findIndex(
+                              (x) => x.ApplnNo === app.ApplnNo
+                            )
+                          )
+                        }
                       >
                         Edit
                       </button>
                     </td>
                   </tr>
                 ))}
+
+                {paginatedApplications.length === 0 && (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: "center" }}>
+                      No records found.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
+
+            {/* Pagination bottom row */}
+            <div className="pagination-container">
+              <div className="pagination-info">
+                Showing{" "}
+                {sortedApplications.length === 0 ? 0 : startIndex + 1} to{" "}
+                {Math.min(endIndex, sortedApplications.length)} of{" "}
+                {sortedApplications.length} entries
+              </div>
+
+              <div className="pagination">
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPageSafe - 1)}
+                  disabled={currentPageSafe === 1}
+                >
+                  &laquo;
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                  (page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => handlePageChange(page)}
+                      className={
+                        page === currentPageSafe ? "active" : undefined
+                      }
+                    >
+                      {page}
+                    </button>
+                  )
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPageSafe + 1)}
+                  disabled={currentPageSafe === totalPages}
+                >
+                  &raquo;
+                </button>
+              </div>
+            </div>
 
             <div className="export-row">
               <span>Export:&nbsp;</span>

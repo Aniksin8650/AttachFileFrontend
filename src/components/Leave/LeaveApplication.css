@@ -425,3 +425,73 @@ select.input-error {
     justify-content: flex-start;
   }
 }
+
+/* --- Sortable column headers --- */
+.sortable-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sortable-header:hover {
+  background: #4a75dd;
+}
+
+/* --- Pagination row under table --- */
+.pagination-row {
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pagination-info {
+  font-size: 13px;
+  color: #555;
+}
+
+.pagination-controls {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.page-btn,
+.page-nav-btn {
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  min-width: 32px;
+  transition: background 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
+}
+
+.page-btn.active {
+  background: #5b86e5;
+  color: #fff;
+  border-color: #5b86e5;
+}
+
+.page-btn:hover,
+.page-nav-btn:hover {
+  background: #f0f0f0;
+  transform: translateY(-1px);
+}
+
+.page-btn:disabled,
+.page-nav-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
+}
+
+/* On small screens, keep pagination neat */
+@media (max-width: 768px) {
+  .pagination-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

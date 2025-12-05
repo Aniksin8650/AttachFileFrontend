@@ -4,6 +4,7 @@ import "../Shared/AttachFile.css";
 import { useLocation } from "react-router-dom";
 
 import AttachFile from "../Shared/AttachFile";
+import { formatFileNameForDisplay } from "../Shared/fileNameUtils";
 
 function LeaveApplication() {
   const location = useLocation();
@@ -23,8 +24,14 @@ function LeaveApplication() {
   const [applications, setApplications] = useState([]);
   const [editingIndex, setEditingIndex] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // 🔁 Sorting state (now controlled via table headers)
   const [sortField, setSortField] = useState("ApplnNo");
   const [sortDirection, setSortDirection] = useState("asc");
+
+  // 📄 Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // 🔔 Toast state
   const [message, setMessage] = useState(null);
@@ -152,9 +159,14 @@ function LeaveApplication() {
     } else if (startDate && new Date(endDate) < new Date(startDate)) {
       newErrors.endDate = "End date cannot be before start date";
     }
-    if (!contact || contact.length !== 10) {
+
+    // 🔹 Normalize contact before validation (digits only, max 10)
+    const cleanedContact = (contact || "").replace(/\D/g, "").slice(0, 10);
+
+    if (!cleanedContact || cleanedContact.length !== 10) {
       newErrors.contact = "Contact must be 10 digits";
     }
+
     if (!file || file.length === 0) {
       newErrors.files = "At least one attachment is required";
     }
@@ -175,7 +187,8 @@ function LeaveApplication() {
     formData.append("reason", reason);
     formData.append("startDate", startDate);
     formData.append("endDate", endDate);
-    formData.append("contact", contact);
+    // 🔹 Always send cleaned contact to backend
+    formData.append("contact", cleanedContact);
 
     // New client files
     file
@@ -274,7 +287,12 @@ function LeaveApplication() {
     setReason(app.reason);
     setStartDate(app.startDate);
     setEndDate(app.endDate);
-    setContact(app.contact);
+
+    // 🔹 Clean contact coming from DB / backend
+    const rawContact = app.contact ? String(app.contact) : "";
+    const cleanedContact = rawContact.replace(/\D/g, "").slice(0, 10);
+    setContact(cleanedContact);
+
     setEditingIndex(index);
     setErrors({});
     setSubmitAttempted(false);
@@ -305,6 +323,7 @@ function LeaveApplication() {
   };
 
   // --------- Filter + sort ----------
+
   const filteredApplications = applications.filter((app) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
@@ -327,6 +346,30 @@ function LeaveApplication() {
     return 0;
   });
 
+  // 🔁 Pagination calculations
+  const totalRecords = sortedApplications.length;
+  const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+  const currentPageSafe = Math.min(currentPage, totalPages);
+  const startIndex = (currentPageSafe - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalRecords);
+  const paginatedApplications = sortedApplications.slice(startIndex, endIndex);
+
+  // 🔁 Sort handler on header click
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+    setCurrentPage(1);
+  };
+
+  const renderSortIndicator = (field) => {
+    if (sortField !== field) return "";
+    return sortDirection === "asc" ? " ▲" : " ▼";
+  };
+
   // --------- Export helpers ----------
   const exportToExcel = (apps) => {
     const headers = [
@@ -347,8 +390,8 @@ function LeaveApplication() {
       app.endDate || "",
       app.reason || "",
       app.files && app.files.length
-        ? app.files.map((f) => f.name).join("; ")
-        : "",
+      ? app.files.map((f) => formatFileNameForDisplay(f.name)).join("; ")
+      : "",
     ]);
 
     const escapeCsv = (value) => {
@@ -455,6 +498,22 @@ function LeaveApplication() {
       exportToPDF(sortedApplications);
       showToast("Export opened for PDF printing.", "success");
     }
+  };
+
+  // Helper to build limited page numbers (for large lists)
+  const getPageNumbers = () => {
+    const nums = [];
+    const maxButtons = 5;
+    let start = Math.max(1, currentPageSafe - Math.floor(maxButtons / 2));
+    let end = start + maxButtons - 1;
+    if (end > totalPages) {
+      end = totalPages;
+      start = Math.max(1, end - maxButtons + 1);
+    }
+    for (let i = start; i <= end; i++) {
+      nums.push(i);
+    }
+    return nums;
   };
 
   return (
@@ -661,6 +720,7 @@ function LeaveApplication() {
                 setErrors({});
                 setSubmitAttempted(false);
                 loadUserFromLocal();
+                setCurrentPage(1);
                 showToast("Form reset.", "info");
               }}
             >
@@ -670,113 +730,200 @@ function LeaveApplication() {
         </form>
       </div>
 
-      {/* Print All Leave Applications */}
-      {/* <div className="print-btn-container">
-        <button
-          className="print-btn"
-          onClick={() => window.open("/print-leaves", "_blank")}
-        >
-          🖨️ Print All Leave Applications
-        </button>
-      </div> */}
-
       {/* Table */}
       {applications.length > 0 && (
         <div className="submitted-section-wrapper">
           <div className="submitted-section">
             <h3>Submitted Leave Applications</h3>
 
-            {/* Filter + Sort controls */}
+            {/* Top controls: entries per page (left) + search (right) */}
             <div className="table-controls">
+              <div className="table-control-item">
+                <label>Show:&nbsp;</label>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+                <span>&nbsp;entries</span>
+              </div>
+
               <div className="table-control-item">
                 <label>Search:&nbsp;</label>
                 <input
                   type="text"
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
                   placeholder="Search by ApplnNo, Emp ID, Name, Reason"
                 />
-              </div>
-
-              <div className="table-control-item">
-                <label>Sort by:&nbsp;</label>
-                <select
-                  value={sortField}
-                  onChange={(e) => setSortField(e.target.value)}
-                >
-                  <option value="ApplnNo">Application No</option>
-                  <option value="name">Name</option>
-                  <option value="startDate">Start Date</option>
-                  <option value="endDate">End Date</option>
-                </select>
-                <button
-                  type="button"
-                  className="sort-direction-btn"
-                  onClick={() =>
-                    setSortDirection((prev) =>
-                      prev === "asc" ? "desc" : "asc"
-                    )
-                  }
-                >
-                  {sortDirection === "asc" ? "⬆️ Asc" : "⬇️ Desc"}
-                </button>
               </div>
             </div>
 
             <table className="applications-table">
               <thead>
                 <tr>
-                  <th>ApplnNo</th>
-                  <th>Emp ID</th>
-                  <th>Name</th>
-                  <th>Start</th>
-                  <th>End</th>
+                  <th
+                    className="sortable-header"
+                    onClick={() => handleSort("ApplnNo")}
+                  >
+                    ApplnNo{renderSortIndicator("ApplnNo")}
+                  </th>
+                  <th
+                    className="sortable-header"
+                    onClick={() => handleSort("empId")}
+                  >
+                    Emp ID{renderSortIndicator("empId")}
+                  </th>
+                  <th
+                    className="sortable-header"
+                    onClick={() => handleSort("name")}
+                  >
+                    Name{renderSortIndicator("name")}
+                  </th>
+                  <th
+                    className="sortable-header"
+                    onClick={() => handleSort("startDate")}
+                  >
+                    Start{renderSortIndicator("startDate")}
+                  </th>
+                  <th
+                    className="sortable-header"
+                    onClick={() => handleSort("endDate")}
+                  >
+                    End{renderSortIndicator("endDate")}
+                  </th>
                   <th>Reason</th>
                   <th>Files</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {sortedApplications.map((app, idx) => (
-                  <tr key={app.ApplnNo}>
-                    <td>{app.ApplnNo}</td>
-                    <td>{app.empId}</td>
-                    <td>{app.name}</td>
-                    <td>{app.startDate}</td>
-                    <td>{app.endDate}</td>
-                    <td>{app.reason}</td>
-                    <td>
-                      {app.files && app.files.length > 0 ? (
-                        app.files.map((f, i) => {
-                          const url = `${API_BASE}/uploads/${app.applicationType}/${app.empId}/${f.name}`;
-                          return (
-                            <div key={i}>
-                              <a
-                                href={url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                {f.name}
-                              </a>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td>
-                      <button
-                        className="edit-btn"
-                        onClick={() => handleEdit(idx)}
-                      >
-                        Edit
-                      </button>
-                    </td>
+                {sortedApplications.length === 0 ? (
+                  <tr>
+                    <td colSpan="8">No applications found.</td>
                   </tr>
-                ))}
+                ) : (
+                  paginatedApplications.map((app, idx) => (
+                    <tr key={app.ApplnNo}>
+                      <td>{app.ApplnNo}</td>
+                      <td>{app.empId}</td>
+                      <td>{app.name}</td>
+                      <td>{app.startDate}</td>
+                      <td>{app.endDate}</td>
+                      <td>{app.reason}</td>
+                      <td>
+                        {app.files && app.files.length > 0 ? (
+                          app.files.map((f, i) => {
+                            const url = `${API_BASE}/uploads/${app.applicationType}/${app.empId}/${f.name}`;
+                            return (
+                              <div key={i}>
+                                <a
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {formatFileNameForDisplay(f.name)}
+                                </a>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td>
+                        <button
+                          className="edit-btn"
+                          onClick={() =>
+                            handleEdit(
+                              applications.findIndex(
+                                (a) => a.ApplnNo === app.ApplnNo
+                              )
+                            )
+                          }
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
+
+            {/* Pagination row below table */}
+            {sortedApplications.length > 0 && (
+              <div className="pagination-row">
+                <div className="pagination-info">
+                  Showing{" "}
+                  {totalRecords === 0 ? 0 : startIndex + 1}–{endIndex} of{" "}
+                  {totalRecords} entries
+                </div>
+                <div className="pagination-controls">
+                  <button
+                    type="button"
+                    className="page-nav-btn"
+                    disabled={currentPageSafe === 1}
+                    onClick={() => setCurrentPage(1)}
+                  >
+                    ⏮
+                  </button>
+                  <button
+                    type="button"
+                    className="page-nav-btn"
+                    disabled={currentPageSafe === 1}
+                    onClick={() =>
+                      setCurrentPage((p) => Math.max(1, p - 1))
+                    }
+                  >
+                    ‹ Prev
+                  </button>
+
+                  {getPageNumbers().map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      className={
+                        "page-btn" +
+                        (num === currentPageSafe ? " active" : "")
+                      }
+                      onClick={() => setCurrentPage(num)}
+                    >
+                      {num}
+                    </button>
+                  ))}
+
+                  <button
+                    type="button"
+                    className="page-nav-btn"
+                    disabled={currentPageSafe === totalPages}
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                    }
+                  >
+                    Next ›
+                  </button>
+                  <button
+                    type="button"
+                    className="page-nav-btn"
+                    disabled={currentPageSafe === totalPages}
+                    onClick={() => setCurrentPage(totalPages)}
+                  >
+                    ⏭
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Export */}
             <div className="export-row">
